@@ -14,6 +14,8 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Hashtable;
 import java.util.Map;
@@ -28,7 +30,11 @@ public class Main {
     private static final String SASL_JAAS_CONFIG = "sasl.jaas.config";
     private static final String SASL_MECHANISM = "sasl.mechanism";
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(Main.class);
+
     public static void main(String[] args) throws Exception {
+
+
 
         // Kafka Source Properties
 
@@ -48,6 +54,11 @@ public class Main {
         final StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
         environment.setRuntimeMode(RuntimeExecutionMode.STREAMING);
         environment.getConfig().setParallelism(1);
+/*
+        If checkpointing is not enabled, the “no restart” strategy is used.
+        If checkpointing is activated and the restart strategy has not been configured,
+        the fixed-delay strategy is used with Integer.MAX_VALUE restart attempts.
+*/
         environment.setRestartStrategy(RestartStrategies.fixedDelayRestart(3, Time.of(10, TimeUnit.SECONDS)));
         KafkaSource<String> kafkaSource = KafkaSource.<String>builder()
                 .setBootstrapServers("fdgate-eh-dev.servicebus.windows.net:9093")
@@ -60,7 +71,27 @@ public class Main {
         DataStream<String> dataStream =
                 environment.fromSource(kafkaSource, WatermarkStrategy.noWatermarks(), "kafka source").uid("kafka-stream");
 
-        dataStream.print();
+
+        //JSON parsing
+
+        Integer count = 0;
+
+
+        DataStream<String> processedStream = dataStream.map((MapFunction<String, String>) jsonMessage -> {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode jsonNode = mapper.readTree(jsonMessage);
+            String traceIdValue = jsonNode.get("header").get("traceId").asText();
+            String transactionType = jsonNode.get("header").get("transactionType").toString();
+            JsonNode products = jsonNode.get("products").get(0).get("productId").get("gtin");
+
+            return "TraceId: " + traceIdValue + " TransactionType:" + transactionType + " products: " + products;
+        })
+                .name("JSON Processing Map")
+                .uid("json-processing-map");
+
+        processedStream.print();
+        LOGGER.info("Processing start");
         environment.execute("kafka read operation");
+        LOGGER.info("Processing stop");
     }
 }
