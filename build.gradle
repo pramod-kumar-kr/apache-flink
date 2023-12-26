@@ -1,5 +1,14 @@
+buildscript {
+    ext {
+        flinkVersion= "1.18.0"
+        slf4jVersion = '1.7.36'
+        log4jVersion = '2.17.1'
+    }
+}
+
 plugins {
     id 'java'
+    id 'java-library'
 }
 
 group = 'org.flink'
@@ -10,13 +19,35 @@ repositories {
 }
 
 dependencies {
-    compileOnly 'org.apache.flink:flink-core:1.18.0'
-    implementation 'org.apache.flink:flink-clients:1.18.0'
-    compileOnly 'org.apache.flink:flink-streaming-java:1.17.1'
-    implementation 'org.apache.flink:flink-connector-files:1.18.0'
-    implementation 'org.apache.flink:flink-connector-kafka:3.0.1-1.18'
-    implementation 'org.apache.flink:flink-connector-datagen:1.18.0'
-    implementation 'org.apache.flink:flink-shaded-jackson:2.14.2-17.0'
+    api("org.apache.flink:flink-clients:${flinkVersion}") {
+        ['commons-collections'].each {
+            exclude(module: "$it")
+        }
+    }
+
+    api(group: 'org.apache.flink', name: 'flink-streaming-java', version: flinkVersion) {
+        ['commons-collections'].each {
+            exclude(module: "$it")
+        }
+    }
+    api(group: 'org.apache.flink', name: 'flink-java', version: flinkVersion) {
+        ['commons-collections'].each {
+            exclude(module: "$it")
+        }
+    }
+    api(group: 'org.apache.flink', name: 'flink-connector-kafka', version: '3.0.2-1.18') {
+        ['commons-collections', 'kafka-clients'].each {
+            exclude(module: "$it")
+        }
+    }
+    api(group: 'org.apache.kafka', name: 'kafka-clients', version: '3.6.1')
+//    compileOnly 'org.apache.flink:flink-core:1.18.0'
+//    implementation 'org.apache.flink:flink-clients:1.18.0'
+//    compileOnly 'org.apache.flink:flink-streaming-java:1.17.1'
+//    implementation 'org.apache.flink:flink-connector-files:1.18.0'
+//    implementation 'org.apache.flink:flink-connector-kafka:3.0.1-1.18'
+//    implementation 'org.apache.flink:flink-connector-datagen:1.18.0'
+//    implementation 'org.apache.flink:flink-shaded-jackson:2.14.2-17.0'
 
     testImplementation platform('org.junit:junit-bom:5.9.1')
     testImplementation 'org.junit.jupiter:junit-jupiter'
