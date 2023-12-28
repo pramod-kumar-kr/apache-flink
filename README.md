@@ -25,3 +25,22 @@
  ./bin/stop-cluster.sh 
 ```
 
+
+# FOR Kubernetes
+
+## Apache Flink
+
+- Install bitnami/spark helm chart
+
+```agsl
+ helm install -f  helm-values/flink-values.yaml oci://registry-1.docker.io/bitnamicharts/flink --generate-name
+```
+
+- Submit the build jar on Apache Spark Cluster
+
+```agsl
+kubectl cp /path/to/jar <spark-master-pod>:/tmp/pipeline.jar
+kubectl exec -t -i <spark-master-pod> -- bash
+spark-submit --master spark://spark-master-0.spark-headless.default.svc.cluster.local:7077 --executor-memory 512m --executor-cores 1 --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 --deploy-mode client --class org.pocspark.Main /tmp/pipeline.jar
+```
+ 

@@ -78,29 +78,25 @@ public class ApacheFlinkPipeline {
                     ObjectMapper mapper = new ObjectMapper();
                     JsonNode jsonNode = mapper.readTree(jsonMessage);
                     String traceIdValue = jsonNode.get("header").get("traceId").asText();
-                    JsonNode products = jsonNode.get("products").get(0).get("productId").get("gtin");
-                    return " Timestamp : " + LocalDateTime.now() +  "  |  TraceId: " + traceIdValue + "  | products: " + products + "  | Count :" + count.getAndSet(count.get() + 1);
+                    return " Timestamp : " + LocalDateTime.now() +  "  |  TraceId: " + traceIdValue + "  | Count :" + count.getAndSet(count.get() + 1);
                 })
-                .name("JSON Processing Map")
+//                .name("JSON Processing Map")
                 .uid("json-processing-map")
-                .setParallelism(16)
-                .setMaxParallelism(24);
+                .name("json-format");
 
         DataStream<String> map2Stream = processedStream.map(new MapFunction<String, String>() {
                     @Override
                     public String map(String value) throws Exception {
                         return value;
                     }
-                }).setParallelism(16)
-                .setMaxParallelism(24);
+                }).name("map-1");
 
         DataStream<String> mapStream = map2Stream.map(new MapFunction<String, String>() {
                     @Override
                     public String map(String value) throws Exception {
                         return value + " | threadId : " + Thread.currentThread().getId();
                     }
-                }).setParallelism(16)
-                .setMaxParallelism(24);
+                }).name("map-2");
 
         mapStream.print();
         environment.execute("kafka read operation");
