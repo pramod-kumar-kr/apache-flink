@@ -12,7 +12,7 @@ repositories {
 dependencies {
     compileOnly 'org.apache.flink:flink-core:1.18.0'
     implementation 'org.apache.flink:flink-clients:1.18.0'
-    compileOnly 'org.apache.flink:flink-streaming-java:1.17.1'
+    compileOnly 'org.apache.flink:flink-streaming-java:1.18.0'
     implementation 'org.apache.flink:flink-connector-files:1.18.0'
     implementation 'org.apache.flink:flink-connector-kafka:3.0.1-1.18'
     implementation 'org.apache.flink:flink-connector-datagen:1.18.0'
