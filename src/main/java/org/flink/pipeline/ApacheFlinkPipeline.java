@@ -4,20 +4,30 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.api.common.RuntimeExecutionMode;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.api.common.time.Time;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.connector.kafka.source.reader.deserializer.KafkaRecordDeserializationSchema;
+import org.apache.flink.shaded.netty4.io.netty.channel.ChannelPipelineException;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.ProcessFunction;
+import org.apache.flink.util.Collector;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.header.Headers;
 import org.flink.Main;
+import org.flink.model.KafkaInput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
@@ -33,6 +43,8 @@ public class ApacheFlinkPipeline {
 
     public static void main(String[] args) throws Exception {
 
+
+        LocalDateTime localDateTime = LocalDateTime.now();
         // Kafka Source Properties
 
         String jaasStr = String.format(SAS_TOKEN_CONFIG, "Endpoint=sb://fdgate-eh-dev.servicebus.windows.net/;SharedAccessKeyName=fdgate-auth;SharedAccessKey=vJQBHUdSPsJ+6jZDSJPuqDl/vIMqAg+VrmhtJTMkJz0=;EntityPath=feed-gateway-ingress");
@@ -57,15 +69,31 @@ public class ApacheFlinkPipeline {
         the fixed-delay strategy is used with Integer.MAX_VALUE restart attempts.
 */
         environment.setRestartStrategy(RestartStrategies.fixedDelayRestart(3, Time.of(10, TimeUnit.SECONDS)));
-        KafkaSource<String> kafkaSource = KafkaSource.<String>builder()
+        KafkaSource<KafkaInput> kafkaSource = KafkaSource.<KafkaInput>builder()
                 .setBootstrapServers("fdgate-eh-dev.servicebus.windows.net:9093")
                 .setProperties(properties)
                 .setTopics("feed-gateway-ingress")
                 .setStartingOffsets(OffsetsInitializer.earliest())
-                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .setDeserializer(new KafkaRecordDeserializationSchema<KafkaInput>(){
+
+                    @Override
+                    public TypeInformation<KafkaInput> getProducedType() {
+                        return TypeInformation.of(KafkaInput.class);
+                    }
+
+                    @Override
+                    public void deserialize(ConsumerRecord<byte[], byte[]> consumerRecord, Collector<KafkaInput> out) throws IOException {
+                        long offset = consumerRecord.offset();
+                        int partition = consumerRecord.partition();
+                        Headers headers = consumerRecord.headers();
+                        String key = new String(consumerRecord.key());
+                        String value = new String(consumerRecord.value());
+                        out.collect(new KafkaInput(headers, key, value, partition, offset));
+                    }
+                })
                 .build();
 
-        DataStream<String> dataStream =
+        DataStream<KafkaInput> dataStream =
                 environment.fromSource(kafkaSource, WatermarkStrategy.noWatermarks(), "kafka source").uid("kafka-stream");
 
 
@@ -73,32 +101,47 @@ public class ApacheFlinkPipeline {
 
         AtomicReference<Long> count = new AtomicReference<>(0L);
 
+        DataStream<KafkaInput> processedStreamKafkaInput = dataStream.process(new ProcessFunction<KafkaInput, KafkaInput>() {
+            @Override
+            public void processElement(KafkaInput value, ProcessFunction<KafkaInput, KafkaInput>.Context ctx, Collector<KafkaInput> collector) throws Exception {
+                collector.collect(value);
+            }
+        }).name("Process-1");
 
-        DataStream<String> processedStream = dataStream.map((MapFunction<String, String>) jsonMessage -> {
-                    ObjectMapper mapper = new ObjectMapper();
-                    JsonNode jsonNode = mapper.readTree(jsonMessage);
-                    String traceIdValue = jsonNode.get("header").get("traceId").asText();
-                    return " Timestamp : " + LocalDateTime.now() +  "  |  TraceId: " + traceIdValue + "  | Count :" + count.getAndSet(count.get() + 1);
-                })
-//                .name("JSON Processing Map")
-                .uid("json-processing-map")
-                .name("json-format");
+        DataStream<KafkaInput> filteredDataStream = processedStreamKafkaInput.filter(new FilterFunction<KafkaInput>() {
+            @Override
+            public boolean filter(KafkaInput value) throws Exception {
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode jsonNode = mapper.readTree(value.getValue());
+                String traceIdValue = jsonNode.get("header").get("transactionType").asText();
+                return traceIdValue.equals("ADD");
+            }
+        }).name("Filter");
 
-        DataStream<String> map2Stream = processedStream.map(new MapFunction<String, String>() {
-                    @Override
-                    public String map(String value) throws Exception {
-                        return value;
-                    }
-                }).name("map-1");
+//        filteredDataStream.print();
 
-        DataStream<String> mapStream = map2Stream.map(new MapFunction<String, String>() {
-                    @Override
-                    public String map(String value) throws Exception {
-                        return value + " | threadId : " + Thread.currentThread().getId();
-                    }
-                }).name("map-2");
+        DataStream<String> valueProcess = filteredDataStream.process(new ProcessFunction<KafkaInput, String>() {
+            @Override
+            public void processElement(KafkaInput value, ProcessFunction<KafkaInput, String>.Context ctx, Collector<String> out) throws Exception {
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode jsonNode = mapper.readTree(value.getValue());
+                String traceIdValue = jsonNode.get("header").get("TraceId").asText();
+                out.collect(traceIdValue);
+            }
+        });
 
-        mapStream.print();
-        environment.execute("kafka read operation");
+        DataStream<String> appendedProcess = valueProcess.map(new MapFunction<String, String>() {
+            @Override
+            public String map(String value) throws Exception {
+                return value + localDateTime;
+            }
+        });
+
+        appendedProcess.print();
+        try {
+            environment.execute("kafka read operation");
+        } catch (Exception e) {
+            throw new ChannelPipelineException(e);
+        }
     }
 }

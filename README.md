@@ -36,11 +36,21 @@
  helm install -f  helm-values/flink-values.yaml oci://registry-1.docker.io/bitnamicharts/flink --generate-name
 ```
 
-- Submit the build jar on Apache Spark Cluster
+- Port Forward
 
 ```agsl
-kubectl cp /path/to/jar <spark-master-pod>:/tmp/pipeline.jar
-kubectl exec -t -i <spark-master-pod> -- bash
-spark-submit --master spark://spark-master-0.spark-headless.default.svc.cluster.local:7077 --executor-memory 512m --executor-cores 1 --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 --deploy-mode client --class org.pocspark.Main /tmp/pipeline.jar
+kubectl port-forward svc/flink-1703758387-jobmanager 8081:8081
+```
+
+- Command to connect to pod :  kubect exec -i -t <job-manager-pod-name>  -- bash
+- kubectl cp /Users/zop7917/IdeaProjects/apache-flink/build/pipeline-1.0-SNAPSHOT.jar flink-1703758387-jobmanager:/tmp/pipeline.jar
+
+### Submit the build jar on Apache Spark Cluster
+
+- Copy jar file to the pod : ```kubectl cp <jar-file-path> <job-manager-pod>:/tmp/pipeline.jar```
+- Execute Pod in interactive mode  :  ```kubect exec -i -t <job-manager-pod-name>  -- bash```
+
+```agsl
+flink run -c org.flink.pipeline.ApacheFlinkPipeline /tmp/pipeline.jar
 ```
  
