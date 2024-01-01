@@ -5,20 +5,31 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.api.common.RuntimeExecutionMode;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
+import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.api.common.time.Time;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.connector.kafka.source.reader.deserializer.KafkaRecordDeserializationSchema;
 import org.apache.flink.runtime.rpc.Local;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.sink.SinkFunction;
+import org.apache.flink.util.Collector;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.header.Headers;
 import org.flink.Main;
+import org.flink.model.KafkaInput;
+import org.flink.model.KafkaRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Properties;
@@ -26,6 +37,33 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class ApacheFlinkPipeline {
+
+    public static class MockApiCallFunction extends RichMapFunction<KafkaInput, String> {
+
+        @Override
+        public String map(KafkaInput input) throws Exception {
+            // Perform your mock API call logic here
+            String mockApiResponse = mockApiCall(input);
+
+            // You can log or perform any other processing based on the mock API response
+
+            return "Processed Record: " + input + ", Mock API Response: " + mockApiResponse;
+        }
+
+        private String mockApiCall(KafkaInput input) {
+            // Implement your mock API call logic here
+            // For example, return a predefined response or generate a response based on the input
+            return "Mock API Response for: " + input;
+        }
+    }
+
+    public static class SimplePrintSink implements SinkFunction<String> {
+        @Override
+        public void invoke(String value, SinkFunction.Context context) {
+            // Replace this with your actual sink logic (e.g., database insertion)
+            System.out.println("Received: " + value);
+        }
+    }
     private static final String SAS_TOKEN_CONFIG = "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"$ConnectionString\" password=\"%s\";";
     private static final String SECURITY_PROTOCOL = "security.protocol";
     private static final String SASL_JAAS_CONFIG = "sasl.jaas.config";
@@ -37,15 +75,15 @@ public class ApacheFlinkPipeline {
 
         // Kafka Source Properties
 
-        String jaasStr = String.format(SAS_TOKEN_CONFIG, "Endpoint=sb://fdgate-eh-dev.servicebus.windows.net/;SharedAccessKeyName=fdgate-auth;SharedAccessKey=vJQBHUdSPsJ+6jZDSJPuqDl/vIMqAg+VrmhtJTMkJz0=;EntityPath=feed-gateway-ingress");
+//        String jaasStr = String.format(SAS_TOKEN_CONFIG, "Endpoint=sb://fdgate-eh-dev.servicebus.windows.net/;SharedAccessKeyName=fdgate-auth;SharedAccessKey=vJQBHUdSPsJ+6jZDSJPuqDl/vIMqAg+VrmhtJTMkJz0=;EntityPath=feed-gateway-ingress");
         Properties properties = new Properties();
-        properties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer");
-        properties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer");
-        properties.put(ProducerConfig.CLIENT_ID_CONFIG, "eis_pim_adp_aeh_feed_gateway_ingress_storm_grp_v2_dev_new__");
-        properties.put(ConsumerConfig.GROUP_ID_CONFIG, "eis_pim_adp_aeh_feed_gateway_ingress_storm_grp_v2_dev_new__");
-        properties.put(SECURITY_PROTOCOL, "SASL_SSL");
-        properties.put(SASL_MECHANISM, "PLAIN");
-        properties.put(SASL_JAAS_CONFIG, jaasStr);
+//        properties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer");
+//        properties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer");
+//        properties.put(ProducerConfig.CLIENT_ID_CONFIG, "eis_pim_adp_aeh_feed_gateway_ingress_storm_grp_v2_dev_new__");
+//        properties.put(ConsumerConfig.GROUP_ID_CONFIG, "eis_pim_adp_aeh_feed_gateway_ingress_storm_grp_v2_dev_new__");
+//        properties.put(SECURITY_PROTOCOL, "SASL_SSL");
+//        properties.put(SASL_MECHANISM, "PLAIN");
+//        properties.put(SASL_JAAS_CONFIG, jaasStr);
 
 
         // Kafka Source
@@ -59,51 +97,47 @@ public class ApacheFlinkPipeline {
         the fixed-delay strategy is used with Integer.MAX_VALUE restart attempts.
 */
         environment.setRestartStrategy(RestartStrategies.fixedDelayRestart(3, Time.of(10, TimeUnit.SECONDS)));
-        KafkaSource<String> kafkaSource = KafkaSource.<String>builder()
-                .setBootstrapServers("fdgate-eh-dev.servicebus.windows.net:9093")
+        KafkaSource<KafkaInput> kafkaSource = KafkaSource.<KafkaInput>builder()
+                .setBootstrapServers("localhost:9092")
                 .setProperties(properties)
-                .setTopics("feed-gateway-ingress")
+                .setTopics("topic-5")
                 .setStartingOffsets(OffsetsInitializer.earliest())
-                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .setDeserializer(new KafkaRecordDeserializationSchema<KafkaInput>() {
+
+
+                    @Override
+                    public TypeInformation<KafkaInput> getProducedType() {
+                        return TypeInformation.of(KafkaInput.class);
+                    }
+
+                    @Override
+                    public void open(DeserializationSchema.InitializationContext context) throws Exception {
+                        KafkaRecordDeserializationSchema.super.open(context);
+                    }
+
+                    @Override
+                    public void deserialize(ConsumerRecord<byte[], byte[]> consumerRecord, Collector<KafkaInput> collector) throws IOException {
+                        long offset = consumerRecord.offset();
+                        int partition = consumerRecord.partition();
+                        Headers headers = consumerRecord.headers();
+                        String value = new String(consumerRecord.value());
+                        collector.collect(new KafkaInput(headers, null, value, partition, offset));
+                    }
+                })
                 .build();
 
-        DataStream<String> dataStream =
+        DataStream<KafkaInput> dataStream =
                 environment.fromSource(kafkaSource, WatermarkStrategy.noWatermarks(), "kafka source").uid("kafka-stream");
 
 
+
+       DataStream<String>  apiCallDataStream = dataStream.map(new MockApiCallFunction());
+
+        apiCallDataStream.print();
         //JSON parsing
 
         AtomicReference<Long> count = new AtomicReference<>(0L);
 
-        LocalDateTime startTime = LocalDateTime.now();
-
-        DataStream<String> processedStream = dataStream.map((MapFunction<String, String>) jsonMessage -> {
-                    ObjectMapper mapper = new ObjectMapper();
-                    JsonNode jsonNode = mapper.readTree(jsonMessage);
-                    String traceIdValue = jsonNode.get("header").get("traceId").asText();
-                    return " Timestamp : " + LocalDateTime.now() +  "  |  TraceId: " + traceIdValue + "  " +
-                            "| Count :" + count.getAndSet(count.get() + 1);
-                })
-//                .name("JSON Processing Map")
-                .uid("json-processing-map")
-                .name("json-format");
-
-        DataStream<String> map2Stream = processedStream.map(new MapFunction<String, String>() {
-                    @Override
-                    public String map(String value) throws Exception {
-                        return value;
-                    }
-                }).name("map-1");
-
-        DataStream<String> mapStream = map2Stream.map(new MapFunction<String, String>() {
-                    @Override
-                    public String map(String value) throws Exception {
-                        return value +  "Start time : " + startTime +
-                                " Time taken : " + ( startTime.getSecond() - LocalDateTime.now().getSecond());
-                    }
-                }).name("map-2");
-
-        mapStream.print();
         environment.execute("kafka read operation");
     }
 }
