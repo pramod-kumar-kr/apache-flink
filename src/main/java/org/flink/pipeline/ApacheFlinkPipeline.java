@@ -16,6 +16,7 @@ import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsIni
 import org.apache.flink.connector.kafka.source.reader.deserializer.KafkaRecordDeserializationSchema;
 import org.apache.flink.runtime.rpc.Local;
 import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.datastream.DataStreamSink;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
 import org.apache.flink.util.Collector;
@@ -90,7 +91,7 @@ public class ApacheFlinkPipeline {
 
         final StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
         environment.setRuntimeMode(RuntimeExecutionMode.STREAMING);
-        environment.getConfig().setParallelism(1);
+        environment.getConfig().setParallelism(4);
 /*
         If checkpointing is not enabled, the “no restart” strategy is used.
         If checkpointing is activated and the restart strategy has not been configured,
@@ -98,9 +99,9 @@ public class ApacheFlinkPipeline {
 */
         environment.setRestartStrategy(RestartStrategies.fixedDelayRestart(3, Time.of(10, TimeUnit.SECONDS)));
         KafkaSource<KafkaInput> kafkaSource = KafkaSource.<KafkaInput>builder()
-                .setBootstrapServers("localhost:9092")
+                .setBootstrapServers("my-new-server-kafka.default.svc.cluster.local:9092")
                 .setProperties(properties)
-                .setTopics("topic-5")
+                .setTopics("test-topic")
                 .setStartingOffsets(OffsetsInitializer.earliest())
                 .setDeserializer(new KafkaRecordDeserializationSchema<KafkaInput>() {
 
@@ -127,17 +128,23 @@ public class ApacheFlinkPipeline {
                 .build();
 
         DataStream<KafkaInput> dataStream =
-                environment.fromSource(kafkaSource, WatermarkStrategy.noWatermarks(), "kafka source").uid("kafka-stream");
+                environment.fromSource(kafkaSource, WatermarkStrategy.noWatermarks(), "kafka source")
+                        .uid("kafka-stream")
+                        .name("DataSource");
 
 
 
-       DataStream<String>  apiCallDataStream = dataStream.map(new MockApiCallFunction());
+       DataStream<String> apiCallDataStream = dataStream.map(new MockApiCallFunction())
+               .name("API Call");
+
+       DataStreamSink<String> sinkDataStream = apiCallDataStream.addSink(new SimplePrintSink())
+               .name("Sink");
 
         apiCallDataStream.print();
         //JSON parsing
 
         AtomicReference<Long> count = new AtomicReference<>(0L);
 
-        environment.execute("kafka read operation");
+        environment.executeAsync("Operation on 2.3 million data");
     }
 }

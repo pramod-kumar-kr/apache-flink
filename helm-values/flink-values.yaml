@@ -429,7 +429,7 @@ taskmanager:
   extraEnvVarsSecret: ""
   ## @param taskmanager.replicaCount Number of Apache Flink replicas
   ##
-  replicaCount: 1
+  replicaCount: 3
   ## Configure extra options for container's liveness, readiness and startup probes
   ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes
   ## @param taskmanager.livenessProbe.enabled Enable livenessProbe on taskmanager nodes

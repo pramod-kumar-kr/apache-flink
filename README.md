@@ -42,7 +42,7 @@
 kubectl port-forward svc/flink-1703758387-jobmanager 8081:8081
 ```
 
-- Command to connect to pod :  kubect exec -i -t <job-manager-pod-name>  -- bash
+- Command to connect to pod :  kubectl exec -i -t <job-manager-pod-name>  -- bash
 - kubectl cp /Users/zop7917/IdeaProjects/apache-flink/build/pipeline-1.0-SNAPSHOT.jar flink-1703758387-jobmanager:/tmp/pipeline.jar
 
 ### Submit the build jar on Apache Spark Cluster
