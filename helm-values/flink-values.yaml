@@ -191,11 +191,11 @@ jobmanager:
     ##    cpu: 2
     ##    memory: 4Gi
     ##
-    limits: {}
+    limits:
     ## Examples:
     ## requests:
-    ##    cpu: 2
-    ##    memory: 4Gi
+      cpu: 2
+      memory: 4Gi
     ##
     requests: {}
   ## @param jobmanager.extraVolumeMounts Optionally specify extra list of additional volumeMounts for flink container
@@ -429,7 +429,7 @@ taskmanager:
   extraEnvVarsSecret: ""
   ## @param taskmanager.replicaCount Number of Apache Flink replicas
   ##
-  replicaCount: 3
+  replicaCount: 1
   ## Configure extra options for container's liveness, readiness and startup probes
   ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes
   ## @param taskmanager.livenessProbe.enabled Enable livenessProbe on taskmanager nodes
@@ -499,8 +499,8 @@ taskmanager:
   resources:
     ## Example:
     ## limits:
-    ##    cpu: 2
-    ##    memory: 4Gi
+    cpu: 2
+    memory: 4Gi
     ##
     limits: {}
     ## Examples:

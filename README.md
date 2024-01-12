@@ -15,7 +15,7 @@
 ```
 
 ```
- For Ex : ./bin/flink run -c org.flink.Main /Users/zop7917/IdeaProjects/apache-flink/build/pipeline-1.0-SNAPSHOT.jar 
+ For Ex : ./bin/flink run -c org.flink.pipeline.ApacheFlinkPipeline /Users/zop7917/IdeaProjects/apache-flink/build/pipeline-1.0-SNAPSHOT.jar 
 ```
 * Above command will submit your jar file to the cluster.
 ### Step 4: Go to Flink Web UI by visiting http://localhost:8081
@@ -33,7 +33,7 @@
 - Install bitnami/spark helm chart
 
 ```agsl
- helm install -f  helm-values/flink-values.yaml oci://registry-1.docker.io/bitnamicharts/flink --generate-name
+ helm install <deployment-name> -f   helm-values/flink-values.yaml oci://registry-1.docker.io/bitnamicharts/flink
 ```
 
 - Port Forward
@@ -53,4 +53,11 @@ kubectl port-forward svc/flink-1703758387-jobmanager 8081:8081
 ```agsl
 flink run -c org.flink.pipeline.ApacheFlinkPipeline /tmp/pipeline.jar
 ```
+
+- job_name: "jobmanager"
+  static_configs:
+    - targets: ["jobmanager:9999"]
+- job_name: "taskmanager1"
+  static_configs:
+    - targets: ["taskmanager1:9999"]
  
