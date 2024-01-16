@@ -9,6 +9,8 @@
 ```
 `Note: Above command will start flink cluster.`
 
+`Run this pipeline pipeline/ApacheFlinkPipeline.java`
+
 ### Step 3: Submit your jar file to cluster
 ```
 ./bin/flink run -c <package-name> <path-to-jar-file>.jar
